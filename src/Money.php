@@ -9,6 +9,13 @@ class Money implements MoneyInterface
     const DEFAULT_SCALE = 6;
 
     /**
+     * An integer amount, optionally negative, with nothing after the last digit
+     *
+     * @internal
+     */
+    const INTEGER_PATTERN = '/^-?\d+\z/';
+
+    /**
      * Currency fractions
      *
      * @var array
@@ -260,7 +267,7 @@ class Money implements MoneyInterface
      */
     protected function setAmountInCents($amountInCents)
     {
-        if (!self::isIntegerString($amountInCents)) {
+        if (!preg_match(self::INTEGER_PATTERN, $amountInCents)) {
             throw new MoneyException('Amount must be integer');
         }
 
@@ -309,7 +316,7 @@ class Money implements MoneyInterface
      */
     protected function setAmountInMinorUnits($amountInMinorUnits = null, $currency = null)
     {
-        if (!self::isIntegerString($amountInMinorUnits)) {
+        if (!preg_match(self::INTEGER_PATTERN, $amountInMinorUnits)) {
             throw new MoneyException('Amount must be integer');
         }
         $fraction = static::getFraction($currency);
@@ -930,16 +937,6 @@ class Money implements MoneyInterface
         }
 
         return (implode('', $array) . $end);
-    }
-
-    /**
-     * @param mixed $value
-     *
-     * @return bool
-     */
-    private static function isIntegerString($value)
-    {
-        return preg_match('/^-?\d+\z/', $value) === 1;
     }
 
     /**

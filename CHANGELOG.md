@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## Unreleased
+## 2.11.1 - 2026-10-26
 ### Fixed
 - An amount ending in a line feed is now rejected instead of silently becoming `0`. `"12.34\n"` and `"1234\n"` used to pass validation and then count as `0` in bcmath on PHP 7, or throw `ValueError` on PHP 8. Affected public entry points:
   - `new Money()`, `Money::create()`, `Money::createFromCents()`, `Money::createFromMinorUnits()` and `Money::createFromNoDelimiterAmount()` throw `MoneyException`

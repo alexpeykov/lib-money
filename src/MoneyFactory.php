@@ -61,7 +61,7 @@ class MoneyFactory implements MoneyFactoryInterface
      */
     public function createFromCents($amountInCents, $currency)
     {
-        if (!preg_match('/^-?\d+\z/', (string)$amountInCents)) {
+        if (!preg_match(Money::INTEGER_PATTERN, (string)$amountInCents)) {
             throw new InvalidAmountException('Amount in cents must be integer');
         }
 
