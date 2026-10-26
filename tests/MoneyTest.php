@@ -988,7 +988,10 @@ class MoneyTest extends TestCase
         $this->assertSame($expected, (new Money($amount, 'EUR'))->getAmount());
     }
 
-    public function commaDecimalSeparatorProvider(): array
+    /**
+     * @return array[]
+     */
+    public function commaDecimalSeparatorProvider()
     {
         return [
             'two decimals' => ['10,50', '10.50'],
@@ -1014,7 +1017,10 @@ class MoneyTest extends TestCase
         new Money($amount, 'EUR');
     }
 
-    public function strayCharactersProvider(): array
+    /**
+     * @return array[]
+     */
+    public function strayCharactersProvider()
     {
         return [
             'trailing line feed' => ["12.34\n"],
@@ -1040,12 +1046,12 @@ class MoneyTest extends TestCase
         ];
     }
 
-    public function testTheRejectionMessageNamesTheNormalisedAmount()
+    public function testTheRejectionMessageEscapesControlCharacters()
     {
         $this->expectException(MoneyException::class);
-        $this->expectExceptionMessage("Amount has invalid chars: 1.5\n");
+        $this->expectExceptionMessage('Amount has invalid chars: 12.34\n');
 
-        new Money("1,5\n", 'EUR');
+        new Money("12.34\n", 'EUR');
     }
 
     public function testCreateRejectsAnAmountWithALineEnding()
@@ -1066,7 +1072,10 @@ class MoneyTest extends TestCase
         $this->assertSame($expected, (new Money($amount, 'EUR'))->getAmount());
     }
 
-    public function numericAmountProvider(): array
+    /**
+     * @return array[]
+     */
+    public function numericAmountProvider()
     {
         return [
             'integer' => [1000, '1000'],
@@ -1085,20 +1094,46 @@ class MoneyTest extends TestCase
         $this->assertSame($expected, Money::$method($amount, $currency)->getAmount());
     }
 
-    public function validFactoryInputProvider(): array
+    /**
+     * @return array[]
+     */
+    public function validFactoryInputProvider()
     {
         return [
             'minor units' => ['createFromMinorUnits', '1234', 'EUR', '12.340000'],
             'minor units without decimals' => ['createFromMinorUnits', '1234', 'JPY', '1234.000000'],
             'no delimiter amount' => ['createFromNoDelimiterAmount', '1234', 'EUR', '12.34'],
-            'negative no delimiter amount' => ['createFromNoDelimiterAmount', '-1234', 'EUR', '-12.34'],
+            'no delimiter amount with a plus sign' => ['createFromNoDelimiterAmount', '+1234', 'EUR', '+12.34'],
+        ];
+    }
+
+    /**
+     * @dataProvider invalidNoDelimiterAmountProvider
+     */
+    public function testCreateFromNoDelimiterAmountReportsTheRawValue(string $amount, string $message)
+    {
+        $this->expectException(MoneyException::class);
+        $this->expectExceptionMessage($message);
+
+        Money::createFromNoDelimiterAmount($amount, 'EUR');
+    }
+
+    /**
+     * @return array[]
+     */
+    public function invalidNoDelimiterAmountProvider()
+    {
+        return [
+            'a decimal point' => ['12.34', 'Invalid amount without delimiter: 12.34'],
+            'a leading space' => [' 1234', 'Invalid amount without delimiter:  1234'],
+            'a sign only' => ['+', 'Invalid amount without delimiter: +'],
         ];
     }
 
     public function testCreateFromNoDelimiterAmountRejectsALineEnding()
     {
         $this->expectException(MoneyException::class);
-        $this->expectExceptionMessage('Amount has invalid chars');
+        $this->expectExceptionMessage('Invalid amount without delimiter: 1234\n');
 
         Money::createFromNoDelimiterAmount("1234\n", 'EUR');
     }

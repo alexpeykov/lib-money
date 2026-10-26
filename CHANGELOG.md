@@ -6,7 +6,17 @@ and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.
 
 ## Unreleased
 ### Fixed
-- `Money::setAmount()`, `Money::createFromCents()`, `Money::createFromMinorUnits()` and `Money::createFromNoDelimiterAmount()` throw `MoneyException` for an amount ending in `\n`. `"12.34\n"` and `"1234\n"` used to pass validation (`createFromNoDelimiterAmount("1234\n")` built a mis-scaled `"123.4\n"`), then count as `0` in bcmath on PHP 7 or throw `ValueError` on PHP 8. Amounts read line by line (e.g. with `fgets`) must be trimmed before they are passed in
+- An amount ending in a line feed is now rejected instead of silently becoming `0`. `"12.34\n"` and `"1234\n"` used to pass validation and then count as `0` in bcmath on PHP 7, or throw `ValueError` on PHP 8. Affected public entry points:
+  - `new Money()`, `Money::create()`, `Money::createFromCents()`, `Money::createFromMinorUnits()` and `Money::createFromNoDelimiterAmount()` throw `MoneyException`
+  - `MoneyFactory::create()` throws `MoneyException`; `MoneyFactory::createFromCents()` throws `InvalidAmountException`
+  - `MoneyNormalizer::mapToEntity()`, `mapFromAmount()`, `mapFromCents()` and `mapFromMinorUnits()` throw `InvalidDataException('Invalid amount specified')`
+
+  Amounts read line by line (e.g. with `fgets`) must be trimmed before they are passed in.
+
+### Changed
+- `MoneyException` messages escape control characters and backslashes in the rejected amount (`"12.34\n"` is reported as `12.34\n`), so a message can no longer split a log line
+- `Money::createFromNoDelimiterAmount()` validates its raw input first and reports the value it was given (`Invalid amount without delimiter: …`) instead of the rescaled one
+- `MoneyFactory::createFromCents()` accepts integer cents only, like `Money::createFromCents()`: a decimal value such as `12.5` (which used to give `0.125`) is rejected, and invalid input throws `InvalidAmountException` instead of Maba's `InvalidNumberException`
 
 ## 2.11.0 - 2026-09-30
 ### Added

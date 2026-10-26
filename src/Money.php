@@ -227,11 +227,11 @@ class Money implements MoneyInterface
         } else {
             $amount = str_replace(',', '.', $amount);
             if (substr_count($amount, '.') > 1) {
-                throw new MoneyException('Invalid amount: ' . $amount);
+                throw new MoneyException('Invalid amount: ' . self::escapeForMessage($amount));
             }
 
             if (!preg_match('/^[-+]?\d+(\.\d+)?\z/', $amount)) {
-                throw new MoneyException('Amount has invalid chars: ' . $amount);
+                throw new MoneyException('Amount has invalid chars: ' . self::escapeForMessage($amount));
             }
 
             $amount = preg_replace('/^([-+]?)0+(\d)/', '$1$2', $amount);
@@ -260,7 +260,7 @@ class Money implements MoneyInterface
      */
     protected function setAmountInCents($amountInCents)
     {
-        if (!preg_match('/^-?\d+\z/', $amountInCents)) {
+        if (!self::isIntegerString($amountInCents)) {
             throw new MoneyException('Amount must be integer');
         }
 
@@ -309,7 +309,7 @@ class Money implements MoneyInterface
      */
     protected function setAmountInMinorUnits($amountInMinorUnits = null, $currency = null)
     {
-        if (!preg_match('/^-?\d+\z/', $amountInMinorUnits)) {
+        if (!self::isIntegerString($amountInMinorUnits)) {
             throw new MoneyException('Amount must be integer');
         }
         $fraction = static::getFraction($currency);
@@ -803,10 +803,14 @@ class Money implements MoneyInterface
      * @param integer $fraction
      *
      * @return static
+     * @throws MoneyException
      */
     static public function createFromNoDelimiterAmount($amount, $currency, $fraction = 2)
     {
         $amount = (string)$amount;
+        if (!preg_match('/^(?:[-+]?\d+|-?)\z/', $amount)) {
+            throw new MoneyException('Invalid amount without delimiter: ' . self::escapeForMessage($amount));
+        }
         if ($amount === '') {
             $amount = '0';
         }
@@ -926,6 +930,26 @@ class Money implements MoneyInterface
         }
 
         return (implode('', $array) . $end);
+    }
+
+    /**
+     * @param mixed $value
+     *
+     * @return bool
+     */
+    private static function isIntegerString($value)
+    {
+        return preg_match('/^-?\d+\z/', $value) === 1;
+    }
+
+    /**
+     * @param mixed $value
+     *
+     * @return string
+     */
+    private static function escapeForMessage($value)
+    {
+        return addcslashes((string)$value, "\0..\37\177\\");
     }
 
     /**

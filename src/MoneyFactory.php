@@ -61,6 +61,10 @@ class MoneyFactory implements MoneyFactoryInterface
      */
     public function createFromCents($amountInCents, $currency)
     {
+        if (!preg_match('/^-?\d+\z/', (string)$amountInCents)) {
+            throw new InvalidAmountException('Amount in cents must be integer');
+        }
+
         return $this->create($this->math->div($amountInCents, '100'), $currency);
     }
 }
