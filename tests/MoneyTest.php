@@ -980,6 +980,140 @@ class MoneyTest extends TestCase
         ];
     }
 
+    /**
+     * @dataProvider commaDecimalSeparatorProvider
+     */
+    public function testACommaThatCanOnlyBeADecimalSeparatorIsAccepted(string $amount, string $expected)
+    {
+        $this->assertSame($expected, (new Money($amount, 'EUR'))->getAmount());
+    }
+
+    public function commaDecimalSeparatorProvider(): array
+    {
+        return [
+            'two decimals' => ['10,50', '10.50'],
+            'two zero decimals' => ['670,00', '670.00'],
+            'seven integer digits' => ['1000000,00', '1000000.00'],
+            'one decimal' => ['1,5', '1.5'],
+            'six decimals' => ['1,010000', '1.010000'],
+            'three decimals after four integer digits' => ['1234,567', '1234.567'],
+            'three decimals after a zero' => ['0,500', '0.500'],
+            'negative three decimals after a zero' => ['-0,125', '-0.125'],
+            'four decimals' => ['1,0000', '1.0000'],
+        ];
+    }
+
+    /**
+     * @dataProvider strayCharactersProvider
+     */
+    public function testAnAmountWithStrayCharactersIsRejected(string $amount)
+    {
+        $this->expectException(MoneyException::class);
+        $this->expectExceptionMessage('Amount has invalid chars');
+
+        new Money($amount, 'EUR');
+    }
+
+    public function strayCharactersProvider(): array
+    {
+        return [
+            'trailing line feed' => ["12.34\n"],
+            'whole number with trailing line feed' => ["1000\n"],
+            'negative with trailing line feed' => ["-12.34\n"],
+            'explicit plus with trailing line feed' => ["+5\n"],
+            'decimal comma with trailing line feed' => ["12,34\n"],
+            'negative decimal comma with trailing line feed' => ["-1,5\n"],
+            'two trailing line feeds' => ["12.34\n\n"],
+            'trailing carriage return' => ["12.34\r"],
+            'trailing carriage return and line feed' => ["12.34\r\n"],
+            'leading line feed' => ["\n12.34"],
+            'line feed inside' => ["12\n.34"],
+            'trailing dot with line feed' => ["12.\n"],
+            'sign only with line feed' => ["-\n"],
+            'line feed only' => ["\n"],
+            'leading tab' => ["\t12.34"],
+            'trailing space' => ['12.34 '],
+            'leading space' => [' 12.34'],
+            'trailing vertical tab' => ["12.34\v"],
+            'trailing form feed' => ["12.34\f"],
+            'trailing null byte' => ["12.34\0"],
+        ];
+    }
+
+    public function testTheRejectionMessageNamesTheNormalisedAmount()
+    {
+        $this->expectException(MoneyException::class);
+        $this->expectExceptionMessage("Amount has invalid chars: 1.5\n");
+
+        new Money("1,5\n", 'EUR');
+    }
+
+    public function testCreateRejectsAnAmountWithALineEnding()
+    {
+        $this->expectException(MoneyException::class);
+        $this->expectExceptionMessage('Amount has invalid chars');
+
+        Money::create("12.34\n", 'EUR');
+    }
+
+    /**
+     * @param int|float $amount
+     *
+     * @dataProvider numericAmountProvider
+     */
+    public function testNumericAmountsAreStillAccepted($amount, string $expected)
+    {
+        $this->assertSame($expected, (new Money($amount, 'EUR'))->getAmount());
+    }
+
+    public function numericAmountProvider(): array
+    {
+        return [
+            'integer' => [1000, '1000'],
+            'negative integer' => [-3, '-3'],
+            'zero' => [0, '0'],
+            'float' => [12.5, '12.5'],
+            'small float' => [0.1, '0.1'],
+        ];
+    }
+
+    /**
+     * @dataProvider validFactoryInputProvider
+     */
+    public function testFactoriesStillAcceptValidInput(string $method, string $amount, string $currency, string $expected)
+    {
+        $this->assertSame($expected, Money::$method($amount, $currency)->getAmount());
+    }
+
+    public function validFactoryInputProvider(): array
+    {
+        return [
+            'minor units' => ['createFromMinorUnits', '1234', 'EUR', '12.340000'],
+            'minor units without decimals' => ['createFromMinorUnits', '1234', 'JPY', '1234.000000'],
+            'no delimiter amount' => ['createFromNoDelimiterAmount', '1234', 'EUR', '12.34'],
+            'negative no delimiter amount' => ['createFromNoDelimiterAmount', '-1234', 'EUR', '-12.34'],
+        ];
+    }
+
+    public function testCreateFromNoDelimiterAmountRejectsALineEnding()
+    {
+        $this->expectException(MoneyException::class);
+        $this->expectExceptionMessage('Amount has invalid chars');
+
+        Money::createFromNoDelimiterAmount("1234\n", 'EUR');
+    }
+
+    /**
+     * @dataProvider createFromIntegerUnitsProvider
+     */
+    public function testCreateFromCentsOrMinorUnitsRejectsALineEnding(string $method)
+    {
+        $this->expectException(MoneyException::class);
+        $this->expectExceptionMessage('Amount must be integer');
+
+        Money::$method("1234\n", 'EUR');
+    }
+
     public function testAnAmountWithTwoDecimalSeparatorsIsRejected()
     {
         $this->expectException(MoneyException::class);

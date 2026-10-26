@@ -230,7 +230,7 @@ class Money implements MoneyInterface
                 throw new MoneyException('Invalid amount: ' . $amount);
             }
 
-            if (!preg_match('/^[-+]?\d+(\.\d+)?$/', $amount)) {
+            if (!preg_match('/^[-+]?\d+(\.\d+)?\z/', $amount)) {
                 throw new MoneyException('Amount has invalid chars: ' . $amount);
             }
 
@@ -260,7 +260,7 @@ class Money implements MoneyInterface
      */
     protected function setAmountInCents($amountInCents)
     {
-        if (!preg_match('/^-?\d+$/', $amountInCents)) {
+        if (!preg_match('/^-?\d+\z/', $amountInCents)) {
             throw new MoneyException('Amount must be integer');
         }
 
@@ -309,7 +309,7 @@ class Money implements MoneyInterface
      */
     protected function setAmountInMinorUnits($amountInMinorUnits = null, $currency = null)
     {
-        if (!preg_match('/^-?\d+$/', $amountInMinorUnits)) {
+        if (!preg_match('/^-?\d+\z/', $amountInMinorUnits)) {
             throw new MoneyException('Amount must be integer');
         }
         $fraction = static::getFraction($currency);

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
+## Unreleased
+### Fixed
+- `Money::setAmount()`, `Money::createFromCents()`, `Money::createFromMinorUnits()` and `Money::createFromNoDelimiterAmount()` throw `MoneyException` for an amount ending in `\n`. `"12.34\n"` and `"1234\n"` used to pass validation (`createFromNoDelimiterAmount("1234\n")` built a mis-scaled `"123.4\n"`), then count as `0` in bcmath on PHP 7 or throw `ValueError` on PHP 8. Amounts read line by line (e.g. with `fgets`) must be trimmed before they are passed in
+
 ## 2.11.0 - 2026-09-30
 ### Added
 - Add Symfony 7.4 support
