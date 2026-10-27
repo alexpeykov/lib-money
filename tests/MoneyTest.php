@@ -10,6 +10,7 @@ use Exception;
 use InvalidArgumentException;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
+use stdClass;
 
 class MoneyTest extends TestCase
 {
@@ -1176,6 +1177,12 @@ class MoneyTest extends TestCase
             'negative zero multiplier' => ['mul', -0.0, '0.000000'],
             'integer divisor' => ['div', 4, '2.500000'],
             'divisor without a leading digit' => ['div', '.5', '20.000000'],
+            'null multiplier counts as zero' => ['mul', null, '0.000000'],
+            'false multiplier counts as zero' => ['mul', false, '0.000000'],
+            'float multiplier below 1e-4' => ['mul', 0.000035, '0.000350'],
+            'float multiplier in scientific notation' => ['mul', 1.0E-5, '0.000100'],
+            'large float multiplier' => ['mul', 1.0E+20, '1000000000000000000000.000000'],
+            'float divisor below 1e-4' => ['div', 0.000035, '285714.285714'],
         ];
     }
 
@@ -1201,6 +1208,8 @@ class MoneyTest extends TestCase
             'negative zero float' => [-0.0],
             'negative zero string' => ['-0'],
             'zero with decimals' => ['0.00'],
+            'null' => [null],
+            'false' => [false],
         ];
     }
 
@@ -1239,7 +1248,251 @@ class MoneyTest extends TestCase
             'a trailing line feed' => ["2\n", '2\n'],
             'a decimal comma' => ['2,5', '2,5'],
             'an array' => [[2], 'array'],
-            'null' => [null, 'NULL'],
+            'not a number float' => [NAN, 'NAN'],
+            'infinite float' => [INF, 'INF'],
+        ];
+    }
+
+    /**
+     * @dataProvider floatAndDecimalStringProvider
+     */
+    public function testMulGivesTheSameResultForAFloatAndItsDecimalString(float $float, string $decimal)
+    {
+        $money = new Money('1000000000000000000', 'EUR');
+
+        $this->assertSame($money->mul($decimal)->getAmount(), $money->mul($float)->getAmount());
+    }
+
+    /**
+     * @dataProvider floatAndDecimalStringProvider
+     */
+    public function testDivGivesTheSameResultForAFloatAndItsDecimalString(float $float, string $decimal)
+    {
+        $money = new Money('1000000000000000000', 'EUR');
+
+        $this->assertSame($money->div($decimal)->getAmount(), $money->div($float)->getAmount());
+    }
+
+    /**
+     * @return array[]
+     */
+    public function floatAndDecimalStringProvider()
+    {
+        return [
+            'vat rate' => [0.21, '0.21'],
+            'sum with binary noise' => [0.1 + 0.2, '0.3'],
+            'thousandth' => [0.001, '0.001'],
+            'thousand' => [1000.0, '1000'],
+            'exact power of ten below 1e-4' => [1.0E-5, '0.00001'],
+            'negative float below 1e-4' => [-0.000035, '-0.000035'],
+            'negative power of ten below 1e-4' => [-1.0E-5, '-0.00001'],
+            'very small float' => [1.0E-12, '0.000000000001'],
+            'more than fourteen significant digits' => [123456789.123456789, '123456789.12346'],
+            'largest float written without exponent' => [1.0E+15, '1000000000000000'],
+            'power of ten not exact in binary' => [1.0E+23, '100000000000000000000000'],
+            'large float with a fraction of digits' => [1.2345678901234567E+25, '12345678901235000000000000'],
+        ];
+    }
+
+    /**
+     * @dataProvider tinyFloatProvider
+     */
+    public function testMulByATinyFloatGivesZeroWithoutANotice(float $multiplier)
+    {
+        $this->assertSame('0.000000', (new Money('10', 'EUR'))->mul($multiplier)->getAmount());
+    }
+
+    /**
+     * @dataProvider tinyFloatProvider
+     */
+    public function testDivByATinyNonZeroFloatIsNotADivisionByZero(float $divisor)
+    {
+        $this->assertTrue((new Money('1', 'EUR'))->div($divisor)->isPositive());
+    }
+
+    /**
+     * @return array[]
+     */
+    public function tinyFloatProvider()
+    {
+        return [
+            'below the sprintf precision limit' => [1.0E-40],
+            'far below the sprintf precision limit' => [1.0E-60],
+            'smallest normal float' => [2.2250738585072014E-308],
+            'subnormal float' => [5.0E-324],
+        ];
+    }
+
+    /**
+     * @dataProvider numericLocaleProvider
+     */
+    public function testMulAndDivIgnoreTheNumericLocale(string $locale)
+    {
+        $previousLocale = setlocale(LC_NUMERIC, '0');
+        if (setlocale(LC_NUMERIC, $locale) === false) {
+            $this->markTestSkipped(sprintf('Locale %s is not installed', $locale));
+        }
+
+        try {
+            $money = new Money('10', 'EUR');
+
+            $this->assertSame('15.000000', $money->mul(1.5)->getAmount());
+            $this->assertSame('0.000100', $money->mul(1.0E-5)->getAmount());
+            $this->assertSame('-0.000350', $money->mul(-0.000035)->getAmount());
+            $this->assertSame('40.000000', $money->div(0.25)->getAmount());
+        } finally {
+            setlocale(LC_NUMERIC, $previousLocale);
+        }
+    }
+
+    /**
+     * @return array[]
+     */
+    public function numericLocaleProvider()
+    {
+        return [
+            'german' => ['de_DE.UTF-8'],
+            'lithuanian' => ['lt_LT.UTF-8'],
+        ];
+    }
+
+    /**
+     * @param mixed $operand
+     *
+     * @dataProvider unusualValidOperandProvider
+     */
+    public function testMulAndDivAcceptAnUnusualButValidOperand(string $method, $operand, string $expected)
+    {
+        $this->assertSame($expected, (new Money('10', 'EUR'))->$method($operand)->getAmount());
+    }
+
+    /**
+     * @return array[]
+     */
+    public function unusualValidOperandProvider()
+    {
+        return [
+            'true multiplier' => ['mul', true, '10.000000'],
+            'true divisor' => ['div', true, '10.000000'],
+            'multiplier with a plus sign' => ['mul', '+5', '50.000000'],
+            'divisor with a plus sign' => ['div', '+5', '2.000000'],
+            'negative zero string multiplier' => ['mul', '-0.0', '0.000000'],
+            'negative multiplier without a leading digit' => ['mul', '-.5', '-5.000000'],
+            'negative integer divisor' => ['div', -4, '-2.500000'],
+            'largest integer multiplier' => ['mul', PHP_INT_MAX, '92233720368547758070.000000'],
+            'stringable multiplier' => ['mul', new StringableOperand('2.5'), '25.000000'],
+            'stringable divisor' => ['div', new StringableOperand('2.5'), '4.000000'],
+        ];
+    }
+
+    /**
+     * @param mixed $divisor
+     *
+     * @dataProvider otherZeroDivisorProvider
+     */
+    public function testDivRejectsAZeroDivisorWrittenAnotherWay($divisor)
+    {
+        $this->expectException(MoneyException::class);
+        $this->expectExceptionMessage('Division by zero');
+
+        (new Money('10', 'EUR'))->div($divisor);
+    }
+
+    /**
+     * @return array[]
+     */
+    public function otherZeroDivisorProvider()
+    {
+        return [
+            'integer zero' => [0],
+            'float zero' => [0.0],
+            'float literal that underflows to zero' => [1.0E-400],
+            'negative zero with decimals' => ['-0.0'],
+            'zero with a plus sign' => ['+0'],
+            'zero without a leading digit' => ['.0'],
+            'zero with a trailing dot' => ['0.'],
+            'several zeros' => ['000'],
+            'stringable zero' => [new StringableOperand('0')],
+        ];
+    }
+
+    /**
+     * @param mixed $operand
+     *
+     * @dataProvider unreadableOperandProvider
+     */
+    public function testMulRejectsAnUnreadableMultiplier($operand, string $message)
+    {
+        $this->expectException(MoneyException::class);
+        $this->expectExceptionMessage('Invalid multiplier: ' . $message);
+
+        (new Money('10', 'EUR'))->mul($operand);
+    }
+
+    /**
+     * @param mixed $operand
+     *
+     * @dataProvider unreadableOperandProvider
+     */
+    public function testDivRejectsAnUnreadableDivisor($operand, string $message)
+    {
+        $this->expectException(MoneyException::class);
+        $this->expectExceptionMessage('Invalid divisor: ' . $message);
+
+        (new Money('10', 'EUR'))->div($operand);
+    }
+
+    /**
+     * @return array[]
+     */
+    public function unreadableOperandProvider()
+    {
+        return [
+            'zero in scientific notation' => ['0e0', '0e0'],
+            'string in scientific notation' => ['1.0E-5', '1.0E-5'],
+            'hexadecimal string' => ['0x1A', '0x1A'],
+            'empty string' => ['', ''],
+            'sign only' => ['+', '+'],
+            'dot only' => ['.', '.'],
+            'double sign' => ['--5', '--5'],
+            'leading space' => [' 5', ' 5'],
+            'trailing tab' => ["5\t", '5\t'],
+            'negative infinite float' => [-INF, '-INF'],
+            'stringable with a decimal comma' => [new StringableOperand('2,5'), '2,5'],
+            'object without __toString' => [new stdClass(), 'object'],
+        ];
+    }
+
+    /**
+     * @param mixed $operand
+     *
+     * @dataProvider rejectedOperandProvider
+     */
+    public function testMulAndDivLeaveTheMoneyUnchangedWhenTheOperandIsRejected(string $method, $operand)
+    {
+        $money = new Money('10.50', 'EUR');
+        $amountBefore = $money->getAmount();
+
+        try {
+            $money->$method($operand);
+            $this->fail('MoneyException expected');
+        } catch (MoneyException $exception) {
+            $this->assertSame($amountBefore, $money->getAmount());
+            $this->assertSame('EUR', $money->getCurrency());
+        }
+    }
+
+    /**
+     * @return array[]
+     */
+    public function rejectedOperandProvider()
+    {
+        return [
+            'invalid multiplier' => ['mul', '2,5'],
+            'infinite multiplier' => ['mul', INF],
+            'invalid divisor' => ['div', '2,5'],
+            'zero divisor' => ['div', '0'],
+            'not a number divisor' => ['div', NAN],
         ];
     }
 

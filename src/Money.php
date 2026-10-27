@@ -9,22 +9,16 @@ class Money implements MoneyInterface
     const DEFAULT_SCALE = 6;
 
     /**
-     * An integer amount, optionally negative, with nothing after the last digit
-     *
      * @internal
      */
     const INTEGER_PATTERN = '/^-?\d+\z/';
 
     /**
-     * A decimal number, optionally signed, with nothing after the last digit
-     *
      * @internal
      */
     const DECIMAL_PATTERN = '/^[-+]?\d+(\.\d+)?\z/';
 
     /**
-     * A number bcmath accepts as an operand (also ".5" and "5."), with nothing after the last character
-     *
      * @internal
      */
     const OPERAND_PATTERN = '/^[-+]?(\d+(\.\d*)?|\.\d+)\z/';
@@ -492,7 +486,7 @@ class Money implements MoneyInterface
      */
     public function mul($multiplier)
     {
-        self::assertOperand($multiplier, 'multiplier');
+        $multiplier = self::normalizeOperand($multiplier, 'multiplier');
 
         return new static($this->getMath()->mul($this->getAmount(), $multiplier), $this->getCurrency());
     }
@@ -508,7 +502,7 @@ class Money implements MoneyInterface
      */
     public function div($divisor)
     {
-        self::assertOperand($divisor, 'divisor');
+        $divisor = self::normalizeOperand($divisor, 'divisor');
         if ($divisor == '0') {
             throw new MoneyException('Division by zero');
         }
@@ -961,10 +955,21 @@ class Money implements MoneyInterface
      * @param mixed $operand
      * @param string $name
      *
+     * @return string
+     *
      * @throws MoneyException
      */
-    private static function assertOperand($operand, $name)
+    private static function normalizeOperand($operand, $name)
     {
+        if ($operand === null || $operand === false) {
+            return '0';
+        }
+        if (is_float($operand)) {
+            if (!is_finite($operand)) {
+                throw new MoneyException(sprintf('Invalid %s: %s', $name, var_export($operand, true)));
+            }
+            return self::floatToDecimalString($operand);
+        }
         $isStringable = is_scalar($operand) || (is_object($operand) && method_exists($operand, '__toString'));
         if (!$isStringable || !preg_match(self::OPERAND_PATTERN, (string)$operand)) {
             throw new MoneyException(sprintf(
@@ -973,6 +978,35 @@ class Money implements MoneyInterface
                 self::escapeForMessage($isStringable ? $operand : gettype($operand))
             ));
         }
+
+        return (string)$operand;
+    }
+
+    /**
+     * @param float $value
+     *
+     * @return string
+     */
+    private static function floatToDecimalString($value)
+    {
+        if ($value == 0) {
+            return '0';
+        }
+        list($mantissa, $exponent) = explode('e', str_replace(',', '.', sprintf('%.13e', abs($value))));
+        $digits = str_replace('.', '', $mantissa);
+        $point = (int)$exponent + 1;
+        if ($point <= 0) {
+            $decimal = '0.' . str_repeat('0', -$point) . $digits;
+        } elseif ($point >= strlen($digits)) {
+            $decimal = $digits . str_repeat('0', $point - strlen($digits));
+        } else {
+            $decimal = substr($digits, 0, $point) . '.' . substr($digits, $point);
+        }
+        if (strpos($decimal, '.') !== false) {
+            $decimal = rtrim(rtrim($decimal, '0'), '.');
+        }
+
+        return ($value < 0 ? '-' : '') . $decimal;
     }
 
     /**
