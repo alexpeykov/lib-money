@@ -30,7 +30,21 @@ class MoneyFactory implements MoneyFactoryInterface
      */
     public function create($amount, $currency)
     {
-        $result = new Money($amount, $currency);
+        if ($amount !== null && !is_scalar($amount)) {
+            throw new InvalidAmountException('Amount must be a number, ' . gettype($amount) . ' given');
+        }
+        try {
+            $result = new Money($amount);
+        } catch (MoneyException $exception) {
+            throw new InvalidAmountException($exception->getMessage(), 0, $exception);
+        }
+        if ($currency !== null) {
+            try {
+                $result->setCurrency($currency);
+            } catch (MoneyException $exception) {
+                throw new InvalidCurrencyException($exception->getMessage(), 0, $exception);
+            }
+        }
         $this->validator->validateMoney($result);
         return $result;
     }
@@ -61,7 +75,7 @@ class MoneyFactory implements MoneyFactoryInterface
      */
     public function createFromCents($amountInCents, $currency)
     {
-        if (!preg_match(Money::INTEGER_PATTERN, (string)$amountInCents)) {
+        if (!is_scalar($amountInCents) || !preg_match(Money::INTEGER_PATTERN, (string)$amountInCents)) {
             throw new InvalidAmountException('Amount in cents must be integer');
         }
 

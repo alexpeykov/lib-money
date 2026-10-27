@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Evp\Component\Money\Tests;
 
 use Evp\Component\Money\Money;
+use Evp\Component\Money\MoneyException;
 use Evp\Component\Money\MoneyFactory;
 use Maba\Component\Math\BcMath;
 use Maba\Component\Math\Math;
@@ -46,13 +47,16 @@ class MoneyFactoryTest extends TestCase
             'zero' => ['createZero', ['EUR'], new Money('0', 'EUR')],
             'cents' => ['createFromCents', [1050, 'EUR'], new Money('10.500000', 'EUR')],
             'negative cents as a string' => ['createFromCents', ['-5', 'EUR'], new Money('-0.050000', 'EUR')],
+            'cents as an integral float' => ['createFromCents', [1050.0, 'EUR'], new Money('10.500000', 'EUR')],
         ];
     }
 
     /**
+     * @param mixed $amountInCents
+     *
      * @dataProvider invalidCentsProvider
      */
-    public function testCreateFromCentsRejectsANonInteger(string $amountInCents)
+    public function testCreateFromCentsRejectsANonInteger($amountInCents)
     {
         $this->expectException(InvalidAmountException::class);
         $this->expectExceptionMessage('Amount in cents must be integer');
@@ -68,7 +72,37 @@ class MoneyFactoryTest extends TestCase
         return [
             'a trailing line feed' => ["1234\n"],
             'a decimal value' => ['12.5'],
+            'an array' => [[1050]],
+            'an object' => [new \stdClass()],
+            'null' => [null],
         ];
+    }
+
+    public function testCreateReportsAnInvalidAmountWithTheFactoryException()
+    {
+        try {
+            $this->createFactory()->create("12.34\n", 'EUR');
+            $this->fail('An amount with a line feed was accepted');
+        } catch (InvalidAmountException $exception) {
+            $this->assertSame('Amount has invalid chars: 12.34\\n', $exception->getMessage());
+            $this->assertInstanceOf(MoneyException::class, $exception->getPrevious());
+        }
+    }
+
+    public function testCreateRejectsANonScalarAmount()
+    {
+        $this->expectException(InvalidAmountException::class);
+        $this->expectExceptionMessage('Amount must be a number, array given');
+
+        $this->createFactory()->create([1], 'EUR');
+    }
+
+    public function testCreateReportsAnUnsupportedCurrencyWithTheFactoryException()
+    {
+        $this->expectException(InvalidCurrencyException::class);
+        $this->expectExceptionMessage('Unsupported currency: ZZZ');
+
+        $this->createFactory()->create('1', 'ZZZ');
     }
 
     public function testCreateValidatesTheCurrencyAgainstTheInformationProvider()

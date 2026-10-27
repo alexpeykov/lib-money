@@ -1104,6 +1104,8 @@ class MoneyTest extends TestCase
             'minor units without decimals' => ['createFromMinorUnits', '1234', 'JPY', '1234.000000'],
             'no delimiter amount' => ['createFromNoDelimiterAmount', '1234', 'EUR', '12.34'],
             'no delimiter amount with a plus sign' => ['createFromNoDelimiterAmount', '+1234', 'EUR', '+12.34'],
+            'one-digit no delimiter amount with a plus sign' => ['createFromNoDelimiterAmount', '+5', 'EUR', '+0.05'],
+            'two-digit no delimiter amount with a plus sign' => ['createFromNoDelimiterAmount', '+12', 'EUR', '+0.12'],
         ];
     }
 
@@ -1126,8 +1128,127 @@ class MoneyTest extends TestCase
         return [
             'a decimal point' => ['12.34', 'Invalid amount without delimiter: 12.34'],
             'a leading space' => [' 1234', 'Invalid amount without delimiter:  1234'],
-            'a sign only' => ['+', 'Invalid amount without delimiter: +'],
+            'a plus sign only' => ['+', 'Invalid amount without delimiter: +'],
+            'a minus sign only' => ['-', 'Invalid amount without delimiter: -'],
         ];
+    }
+
+    /**
+     * @dataProvider noDelimiterAmountWithoutFractionProvider
+     */
+    public function testCreateFromNoDelimiterAmountWithoutFractionKeepsEveryDigit(string $amount, string $expected)
+    {
+        $this->assertSame($expected, Money::createFromNoDelimiterAmount($amount, 'JPY', 0)->getAmount());
+    }
+
+    /**
+     * @return array[]
+     */
+    public function noDelimiterAmountWithoutFractionProvider()
+    {
+        return [
+            'positive' => ['1234', '1234'],
+            'negative' => ['-5', '-5'],
+            'leading zeros' => ['0012', '12'],
+        ];
+    }
+
+    /**
+     * @param mixed $operand
+     *
+     * @dataProvider validOperandProvider
+     */
+    public function testMulAndDivAcceptEveryOperandShapeBcmathAccepts(string $method, $operand, string $expected)
+    {
+        $this->assertSame($expected, (new Money('10', 'EUR'))->$method($operand)->getAmount());
+    }
+
+    /**
+     * @return array[]
+     */
+    public function validOperandProvider()
+    {
+        return [
+            'integer multiplier' => ['mul', 2, '20.000000'],
+            'float multiplier' => ['mul', 0.5, '5.000000'],
+            'multiplier without a leading digit' => ['mul', '.5', '5.000000'],
+            'multiplier with a trailing dot' => ['mul', '5.', '50.000000'],
+            'negative zero multiplier' => ['mul', -0.0, '0.000000'],
+            'integer divisor' => ['div', 4, '2.500000'],
+            'divisor without a leading digit' => ['div', '.5', '20.000000'],
+        ];
+    }
+
+    /**
+     * @param mixed $divisor
+     *
+     * @dataProvider zeroDivisorProvider
+     */
+    public function testDivRejectsEveryZeroShape($divisor)
+    {
+        $this->expectException(MoneyException::class);
+        $this->expectExceptionMessage('Division by zero');
+
+        (new Money('10', 'EUR'))->div($divisor);
+    }
+
+    /**
+     * @return array[]
+     */
+    public function zeroDivisorProvider()
+    {
+        return [
+            'negative zero float' => [-0.0],
+            'negative zero string' => ['-0'],
+            'zero with decimals' => ['0.00'],
+        ];
+    }
+
+    /**
+     * @param mixed $operand
+     *
+     * @dataProvider invalidOperandProvider
+     */
+    public function testMulRejectsAnInvalidMultiplier($operand, string $message)
+    {
+        $this->expectException(MoneyException::class);
+        $this->expectExceptionMessage('Invalid multiplier: ' . $message);
+
+        (new Money('10', 'EUR'))->mul($operand);
+    }
+
+    /**
+     * @param mixed $operand
+     *
+     * @dataProvider invalidOperandProvider
+     */
+    public function testDivRejectsAnInvalidDivisor($operand, string $message)
+    {
+        $this->expectException(MoneyException::class);
+        $this->expectExceptionMessage('Invalid divisor: ' . $message);
+
+        (new Money('10', 'EUR'))->div($operand);
+    }
+
+    /**
+     * @return array[]
+     */
+    public function invalidOperandProvider()
+    {
+        return [
+            'a trailing line feed' => ["2\n", '2\n'],
+            'a decimal comma' => ['2,5', '2,5'],
+            'an array' => [[2], 'array'],
+            'null' => [null, 'NULL'],
+        ];
+    }
+
+    public function testCreateFromNoDelimiterAmountRejectsANegativeFraction()
+    {
+        $this->expectException(MoneyException::class);
+        $this->expectExceptionMessage('Fraction must not be negative: -2');
+
+        Money::createFromNoDelimiterAmount('1234', 'EUR', -2);
     }
 
     public function testCreateFromNoDelimiterAmountRejectsALineEnding()

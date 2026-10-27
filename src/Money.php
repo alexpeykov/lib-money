@@ -16,6 +16,20 @@ class Money implements MoneyInterface
     const INTEGER_PATTERN = '/^-?\d+\z/';
 
     /**
+     * A decimal number, optionally signed, with nothing after the last digit
+     *
+     * @internal
+     */
+    const DECIMAL_PATTERN = '/^[-+]?\d+(\.\d+)?\z/';
+
+    /**
+     * A number bcmath accepts as an operand (also ".5" and "5."), with nothing after the last character
+     *
+     * @internal
+     */
+    const OPERAND_PATTERN = '/^[-+]?(\d+(\.\d*)?|\.\d+)\z/';
+
+    /**
      * Currency fractions
      *
      * @var array
@@ -237,7 +251,7 @@ class Money implements MoneyInterface
                 throw new MoneyException('Invalid amount: ' . self::escapeForMessage($amount));
             }
 
-            if (!preg_match('/^[-+]?\d+(\.\d+)?\z/', $amount)) {
+            if (!preg_match(self::DECIMAL_PATTERN, $amount)) {
                 throw new MoneyException('Amount has invalid chars: ' . self::escapeForMessage($amount));
             }
 
@@ -406,7 +420,7 @@ class Money implements MoneyInterface
         $currency = strtoupper($currency);
 
         if (!isset(static::$fractions[$currency])) {
-            throw new MoneyException(sprintf('Unsupported currency: %s', $currency));
+            throw new MoneyException(sprintf('Unsupported currency: %s', self::escapeForMessage($currency)));
         }
 
         $this->currency = $currency;
@@ -473,9 +487,13 @@ class Money implements MoneyInterface
      * @param string|int $multiplier
      *
      * @return static
+     *
+     * @throws MoneyException
      */
     public function mul($multiplier)
     {
+        self::assertOperand($multiplier, 'multiplier');
+
         return new static($this->getMath()->mul($this->getAmount(), $multiplier), $this->getCurrency());
     }
 
@@ -490,6 +508,7 @@ class Money implements MoneyInterface
      */
     public function div($divisor)
     {
+        self::assertOperand($divisor, 'divisor');
         if ($divisor == '0') {
             throw new MoneyException('Division by zero');
         }
@@ -797,7 +816,7 @@ class Money implements MoneyInterface
     {
         $currency = strtoupper($currency);
         if (!isset(static::$fractions[$currency])) {
-            throw new MoneyException(sprintf('Unsupported currency: %s', $currency));
+            throw new MoneyException(sprintf('Unsupported currency: %s', self::escapeForMessage($currency)));
         }
         return static::$fractions[$currency];
     }
@@ -815,29 +834,28 @@ class Money implements MoneyInterface
     static public function createFromNoDelimiterAmount($amount, $currency, $fraction = 2)
     {
         $amount = (string)$amount;
-        if (!preg_match('/^(?:[-+]?\d+|-?)\z/', $amount)) {
+        if ($amount !== '' && !preg_match('/^[-+]?\d+\z/', $amount)) {
             throw new MoneyException('Invalid amount without delimiter: ' . self::escapeForMessage($amount));
         }
-        if ($amount === '') {
-            $amount = '0';
+        if ($fraction < 0) {
+            throw new MoneyException('Fraction must not be negative: ' . self::escapeForMessage($fraction));
         }
-        if ($amount[0] === '-') {
-            $minus = true;
+        $sign = '';
+        if ($amount !== '' && ($amount[0] === '-' || $amount[0] === '+')) {
+            $sign = $amount[0];
             $amount = substr($amount, 1);
+        }
+        if ($fraction > 0) {
+            $digits = str_split(str_repeat('0', $fraction) . $amount);
+            $left = implode('', array_slice($digits, 0, -$fraction));
+            $right = '.' . implode('', array_slice($digits, -$fraction));
         } else {
-            $minus = false;
+            $left = $amount;
+            $right = '';
         }
-        $amount = str_repeat('0', $fraction) . $amount;
-        $amountArray = str_split($amount);
-        $left = array_slice($amountArray, 0, -$fraction);
-        $right = array_slice($amountArray, -$fraction);
-        $left = ltrim(implode('', $left), '0');
+        $left = ltrim($left, '0');
         $left = $left === '' ? '0' : $left;
-        $amount = $left . '.' . implode('', $right);
-        if ($minus) {
-            $amount = '-' . $amount;
-        }
-        return new static($amount, $currency);
+        return new static($sign . $left . $right, $currency);
     }
 
     /**
@@ -937,6 +955,24 @@ class Money implements MoneyInterface
         }
 
         return (implode('', $array) . $end);
+    }
+
+    /**
+     * @param mixed $operand
+     * @param string $name
+     *
+     * @throws MoneyException
+     */
+    private static function assertOperand($operand, $name)
+    {
+        $isStringable = is_scalar($operand) || (is_object($operand) && method_exists($operand, '__toString'));
+        if (!$isStringable || !preg_match(self::OPERAND_PATTERN, (string)$operand)) {
+            throw new MoneyException(sprintf(
+                'Invalid %s: %s',
+                $name,
+                self::escapeForMessage($isStringable ? $operand : gettype($operand))
+            ));
+        }
     }
 
     /**

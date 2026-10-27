@@ -4,19 +4,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](http://keepachangelog.com/en/1.0.0/)
 and this project adheres to [Semantic Versioning](http://semver.org/spec/v2.0.0.html).
 
-## 2.11.1 - 2026-10-26
+## 2.12.0 - 2026-10-27
 ### Fixed
-- An amount ending in a line feed is now rejected instead of silently becoming `0`. `"12.34\n"` and `"1234\n"` used to pass validation and then count as `0` in bcmath on PHP 7, or throw `ValueError` on PHP 8. Affected public entry points:
+- An amount or operand ending in a line feed is now rejected instead of silently becoming `0`. `"12.34\n"` and `"1234\n"` used to pass validation and then count as `0` in bcmath on PHP 7, or throw `ValueError` on PHP 8. Affected public entry points:
   - `new Money()`, `Money::create()`, `Money::createFromCents()`, `Money::createFromMinorUnits()` and `Money::createFromNoDelimiterAmount()` throw `MoneyException`
-  - `MoneyFactory::create()` throws `MoneyException`; `MoneyFactory::createFromCents()` throws `InvalidAmountException`
+  - `Money::mul()` and `Money::div()` validate their operand and throw `MoneyException` (on PHP 7, `div("2\n")` used to return `0` with a division-by-zero warning)
+  - `MoneyFactory::create()` and `MoneyFactory::createFromCents()` throw `InvalidAmountException`
   - `MoneyNormalizer::mapToEntity()`, `mapFromAmount()`, `mapFromCents()` and `mapFromMinorUnits()` throw `InvalidDataException('Invalid amount specified')`
 
   Amounts read line by line (e.g. with `fgets`) must be trimmed before they are passed in.
+- `Money::createFromNoDelimiterAmount()` with a fraction of `0` keeps every digit: `('1234', 'JPY', 0)` used to give `0.1234`
+- `Money::createFromNoDelimiterAmount()` handles a leading `+` like a leading `-`: `"+5"` used to fail with `Amount has invalid chars: 0.+5`
 
 ### Changed
-- `MoneyException` messages escape control characters and backslashes in the rejected amount (`"12.34\n"` is reported as `12.34\n`), so a message can no longer split a log line
-- `Money::createFromNoDelimiterAmount()` validates its raw input first and reports the value it was given (`Invalid amount without delimiter: …`) instead of the rescaled one
-- `MoneyFactory::createFromCents()` accepts integer cents only, like `Money::createFromCents()`: a decimal value such as `12.5` (which used to give `0.125`) is rejected, and invalid input throws `InvalidAmountException` instead of Maba's `InvalidNumberException`
+- `Money::createFromNoDelimiterAmount()` validates its raw input first and reports the value it was given (`Invalid amount without delimiter: …`). A sign with no digits (`"-"`, `"+"`) is rejected; `"-"` used to give `-0.00`
+- `MoneyFactory::create()` reports an invalid or non-scalar amount as `InvalidAmountException` and an unsupported currency as `InvalidCurrencyException` (previously `MoneyException`, or a PHP `TypeError` for an array; the original exception is kept as the previous one)
+- `MoneyFactory::createFromCents()` accepts integer cents only, like `Money::createFromCents()`: a decimal value such as `12.5` (which used to give `0.125`), a fractional float or a non-scalar value throws `InvalidAmountException` instead of Maba's `InvalidNumberException`. An integral float such as `1050.0` is still accepted
+- `Money::mul()` and `Money::div()` reject an operand bcmath cannot read as a number: a trailing line feed, a decimal comma (`"2,5"`), an array, `null` or `false` (`null` and `false` used to give `0`). Integers, floats, `".5"` and `"5."` still work
+- `Money::createFromNoDelimiterAmount()` rejects a negative fraction with `MoneyException` (it used to fail with a PHP error)
+- `MoneyException` messages escape control characters and backslashes in the rejected amount, operand or currency (`"12.34\n"` is reported as `12.34\n`), so a message can no longer split a log line
 
 ## 2.11.0 - 2026-09-30
 ### Added
