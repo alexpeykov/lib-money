@@ -30,8 +30,14 @@ class MoneyFactory implements MoneyFactoryInterface
      */
     public function create($amount, $currency)
     {
+        if (is_object($amount) && method_exists($amount, '__toString')) {
+            $amount = (string)$amount;
+        }
         if ($amount !== null && !is_scalar($amount)) {
             throw new InvalidAmountException('Amount must be a number, ' . gettype($amount) . ' given');
+        }
+        if ($currency !== null && !is_string($currency)) {
+            throw new InvalidCurrencyException('Currency must be a string, ' . gettype($currency) . ' given');
         }
         try {
             $result = new Money($amount);

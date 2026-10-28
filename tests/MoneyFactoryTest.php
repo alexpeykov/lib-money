@@ -25,7 +25,7 @@ class MoneyFactoryTest extends TestCase
     }
 
     /**
-     * @param array<int, string|int> $arguments
+     * @param array<int, mixed> $arguments
      *
      * @dataProvider createProvider
      */
@@ -48,6 +48,7 @@ class MoneyFactoryTest extends TestCase
             'cents' => ['createFromCents', [1050, 'EUR'], new Money('10.500000', 'EUR')],
             'negative cents as a string' => ['createFromCents', ['-5', 'EUR'], new Money('-0.050000', 'EUR')],
             'cents as an integral float' => ['createFromCents', [1050.0, 'EUR'], new Money('10.500000', 'EUR')],
+            'stringable amount' => ['create', [new StringableOperand('10.50'), 'EUR'], new Money('10.50', 'EUR')],
         ];
     }
 
@@ -75,6 +76,7 @@ class MoneyFactoryTest extends TestCase
             'an array' => [[1050]],
             'an object' => [new \stdClass()],
             'null' => [null],
+            'a plus sign, rejected before as well' => ['+500'],
         ];
     }
 
@@ -89,12 +91,52 @@ class MoneyFactoryTest extends TestCase
         }
     }
 
-    public function testCreateRejectsANonScalarAmount()
+    /**
+     * @param mixed $amount
+     *
+     * @dataProvider nonScalarAmountProvider
+     */
+    public function testCreateRejectsANonScalarAmount($amount, string $message)
     {
         $this->expectException(InvalidAmountException::class);
-        $this->expectExceptionMessage('Amount must be a number, array given');
+        $this->expectExceptionMessage($message);
 
-        $this->createFactory()->create([1], 'EUR');
+        $this->createFactory()->create($amount, 'EUR');
+    }
+
+    /**
+     * @return array[]
+     */
+    public function nonScalarAmountProvider()
+    {
+        return [
+            'an array' => [[1], 'Amount must be a number, array given'],
+            'an object without __toString' => [new \stdClass(), 'Amount must be a number, object given'],
+        ];
+    }
+
+    /**
+     * @param mixed $currency
+     *
+     * @dataProvider nonStringCurrencyProvider
+     */
+    public function testCreateRejectsANonStringCurrency($currency, string $message)
+    {
+        $this->expectException(InvalidCurrencyException::class);
+        $this->expectExceptionMessage($message);
+
+        $this->createFactory()->create('1', $currency);
+    }
+
+    /**
+     * @return array[]
+     */
+    public function nonStringCurrencyProvider()
+    {
+        return [
+            'an array' => [['EUR'], 'Currency must be a string, array given'],
+            'an object' => [new \stdClass(), 'Currency must be a string, object given'],
+        ];
     }
 
     public function testCreateReportsAnUnsupportedCurrencyWithTheFactoryException()

@@ -1104,9 +1104,9 @@ class MoneyTest extends TestCase
             'minor units' => ['createFromMinorUnits', '1234', 'EUR', '12.340000'],
             'minor units without decimals' => ['createFromMinorUnits', '1234', 'JPY', '1234.000000'],
             'no delimiter amount' => ['createFromNoDelimiterAmount', '1234', 'EUR', '12.34'],
-            'no delimiter amount with a plus sign' => ['createFromNoDelimiterAmount', '+1234', 'EUR', '+12.34'],
-            'one-digit no delimiter amount with a plus sign' => ['createFromNoDelimiterAmount', '+5', 'EUR', '+0.05'],
-            'two-digit no delimiter amount with a plus sign' => ['createFromNoDelimiterAmount', '+12', 'EUR', '+0.12'],
+            'no delimiter amount with a plus sign' => ['createFromNoDelimiterAmount', '+1234', 'EUR', '12.34'],
+            'one-digit no delimiter amount with a plus sign' => ['createFromNoDelimiterAmount', '+5', 'EUR', '0.05'],
+            'two-digit no delimiter amount with a plus sign' => ['createFromNoDelimiterAmount', '+12', 'EUR', '0.12'],
         ];
     }
 
@@ -1288,7 +1288,7 @@ class MoneyTest extends TestCase
             'negative power of ten below 1e-4' => [-1.0E-5, '-0.00001'],
             'very small float' => [1.0E-12, '0.000000000001'],
             'more than fourteen significant digits' => [123456789.123456789, '123456789.12346'],
-            'largest float written without exponent' => [1.0E+15, '1000000000000000'],
+            'float of at least 1e14' => [1.0E+15, '1000000000000000'],
             'power of ten not exact in binary' => [1.0E+23, '100000000000000000000000'],
             'large float with a fraction of digits' => [1.2345678901234567E+25, '12345678901235000000000000'],
         ];
@@ -1502,6 +1502,37 @@ class MoneyTest extends TestCase
         $this->expectExceptionMessage('Fraction must not be negative: -2');
 
         Money::createFromNoDelimiterAmount('1234', 'EUR', -2);
+    }
+
+    /**
+     * @param mixed $fraction
+     *
+     * @dataProvider nonIntegerFractionProvider
+     */
+    public function testCreateFromNoDelimiterAmountRejectsANonIntegerFraction($fraction, string $message)
+    {
+        $this->expectException(MoneyException::class);
+        $this->expectExceptionMessage($message);
+
+        Money::createFromNoDelimiterAmount('5', 'EUR', $fraction);
+    }
+
+    /**
+     * @return array[]
+     */
+    public function nonIntegerFractionProvider()
+    {
+        return [
+            'null' => [null, 'Fraction must be an integer: NULL'],
+            'numeric string' => ['2', "Fraction must be an integer: '2'"],
+            'float' => [2.0, 'Fraction must be an integer: 2.0'],
+            'string with a line feed' => ["2\n", "Fraction must be an integer: '2\\n'"],
+        ];
+    }
+
+    public function testCreateFromNoDelimiterAmountWithAPlusSignCanBeNegated()
+    {
+        $this->assertSame('-0.05', Money::createFromNoDelimiterAmount('+5', 'EUR')->negate()->getAmount());
     }
 
     public function testCreateFromNoDelimiterAmountRejectsALineEnding()

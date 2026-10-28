@@ -478,7 +478,7 @@ class Money implements MoneyInterface
     /**
      * Mul money
      *
-     * @param string|int $multiplier
+     * @param string|int|float|bool|object|null $multiplier
      *
      * @return static
      *
@@ -494,7 +494,7 @@ class Money implements MoneyInterface
     /**
      * Div money
      *
-     * @param string|int $divisor
+     * @param string|int|float|bool|object|null $divisor
      *
      * @return static
      *
@@ -820,9 +820,10 @@ class Money implements MoneyInterface
      *
      * @param string $amount
      * @param string $currency
-     * @param integer $fraction
+     * @param int $fraction
      *
      * @return static
+     *
      * @throws MoneyException
      */
     static public function createFromNoDelimiterAmount($amount, $currency, $fraction = 2)
@@ -831,14 +832,16 @@ class Money implements MoneyInterface
         if ($amount !== '' && !preg_match('/^[-+]?\d+\z/', $amount)) {
             throw new MoneyException('Invalid amount without delimiter: ' . self::escapeForMessage($amount));
         }
+        if (!is_int($fraction)) {
+            throw new MoneyException(
+                'Fraction must be an integer: ' . self::escapeForMessage(var_export($fraction, true))
+            );
+        }
         if ($fraction < 0) {
-            throw new MoneyException('Fraction must not be negative: ' . self::escapeForMessage($fraction));
+            throw new MoneyException('Fraction must not be negative: ' . $fraction);
         }
-        $sign = '';
-        if ($amount !== '' && ($amount[0] === '-' || $amount[0] === '+')) {
-            $sign = $amount[0];
-            $amount = substr($amount, 1);
-        }
+        $sign = $amount !== '' && $amount[0] === '-' ? '-' : '';
+        $amount = ltrim($amount, '-+');
         if ($fraction > 0) {
             $digits = str_split(str_repeat('0', $fraction) . $amount);
             $left = implode('', array_slice($digits, 0, -$fraction));
@@ -989,7 +992,7 @@ class Money implements MoneyInterface
      */
     private static function floatToDecimalString($value)
     {
-        if ($value == 0) {
+        if ($value === 0.0) {
             return '0';
         }
         list($mantissa, $exponent) = explode('e', str_replace(',', '.', sprintf('%.13e', abs($value))));
